@@ -1,4 +1,4 @@
-use std::{fs::File, io::{BufRead, BufReader, Read}, path::{Path, PathBuf}};
+use std::{fmt::Display, fs::File, io::{BufRead, BufReader}, path::{Path, PathBuf}};
 
 /// 
 /// A type for an add-on.
@@ -25,7 +25,7 @@ pub struct Addon {
 /// This process goes as follows:
 /// - First, determine the location of the addon's "toc" file.
 /// - Second, determine whether the addon is a primary addon or an attachment via separator charactor parsing.
-/// - Third, construct the 
+/// - Third, construct the add-on type.
 pub fn construct_addon(path: &Path) -> Addon {
 
     let mut title: Option<String> = None;
@@ -40,19 +40,18 @@ pub fn construct_addon(path: &Path) -> Addon {
             if file_type.is_file() && file_name.ends_with(".toc") {
                 let file = File::open(entry.path()).expect("Cannot open TOC file");
 
-                let mut buf = BufReader::new(file);
+                let buf = BufReader::new(file);
 
                 for line in buf.lines() {
                     if let Ok(line) = line {
-                        if line.starts_with("##") {
-                            let line = line.replace("## ", "");
-                            
-                            if line.starts_with("Title:") {
-                                title = Some(line.replace("Title: ", ""));
+                        if let Ok(line) = find_and_replace_detail("## ", &line) {
+
+                            if let Ok(found_title) = find_and_replace_detail("Title: ", &line) {
+                                title = Some(found_title);
                             }
 
-                            if line.starts_with("Version:") {
-                                version = Some(line.replace("Version: ", ""));
+                            if let Ok(found_version) = find_and_replace_detail("Version: ", &line) {
+                                version = Some(found_version);
                             }
                         }
                     }
@@ -69,4 +68,35 @@ pub fn construct_addon(path: &Path) -> Addon {
         update_site: None,
         attachments: None,
     }
+}
+
+/// Result type which uses the toc file detail error.
+type Result<T> = std::result::Result<T, DetailNotFoundError>;
+
+/// Error definition for when we are unable to find a toc file detail.
+#[derive(Debug, Clone)]
+pub struct DetailNotFoundError;
+
+impl Display for DetailNotFoundError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Detail not found")
+    }
+}
+
+///
+/// Checks if a line starts with the detail, then replaces the detail string in the line.
+/// 
+/// Returns the replaced line.
+/// 
+/// ie:
+/// Line is "## Hey" , which starts with detail "## ", "## " is then removed from the line and "Hey" is returned.
+/// 
+fn find_and_replace_detail(detail: &str, line: &str) -> Result<String> {
+    if line.starts_with(detail) {
+        let line = line.replace(detail, "");
+
+        return Ok(line)    
+    }
+
+    return Err(DetailNotFoundError)
 }
